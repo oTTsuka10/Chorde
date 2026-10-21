@@ -1,0 +1,10 @@
+node_modules
+mobile
+backend/node_modules
+backend/storage
+backend/chorde.db
+processing/.venv
+processing/__pycache__
+.expo
+.abacusai
+.git

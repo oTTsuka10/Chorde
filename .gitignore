@@ -1,0 +1,12 @@
+node_modules/
+backend/storage/*
+!backend/storage/.gitkeep
+backend/chorde.db
+processing/.venv/
+processing/__pycache__/
+.expo/
+*.pyc
+.abacusai/
+*.msi
+*.log
+letras_*.html
