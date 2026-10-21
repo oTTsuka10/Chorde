@@ -1,0 +1,31 @@
+# dependências
+node_modules/
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+.expo-shared/
+
+# builds nativos
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# logs e arquivos locais
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.env
+.env.*
+!.env.example
+
+# sistema
+.DS_Store
+Thumbs.db
