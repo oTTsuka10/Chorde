@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Aponte para o IP/host do backend. Emulador Android: http://10.0.2.2:3000
 // Dispositivo fisico: http://<ip-da-sua-maquina>:3000
-export const API_URL = 'http://10.0.2.2:3000';
+export const API_URL = 'https://chorde.onrender.com';
 
 const api = axios.create({ baseURL: API_URL });
 
