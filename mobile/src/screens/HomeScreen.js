@@ -34,7 +34,7 @@ export default function HomeScreen({ navigation }) {
       navigation.navigate('Song', { id: song.id });
       loadSongs();
     } catch (e) {
-      Alert.alert('Erro', 'Falha ao enviar o audio para o servidor.');
+      Alert.alert('Erro', 'Falha ao enviar o audio para o servidor.\n\n' + (e.message || e));
     } finally {
       setUploading(false);
     }

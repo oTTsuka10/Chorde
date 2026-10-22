@@ -29,15 +29,28 @@ export default function SongScreen({ route, navigation }) {
   const pollRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+
     async function poll() {
-      const data = await getSong(id);
-      setSong(data);
-      if (data.status === 'processing') {
-        pollRef.current = setTimeout(poll, 3000);
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const data = await getSong(id);
+        if (cancelled) return;
+        setSong(data);
+        if (data.status === 'processing' && attempts < 100) {
+          pollRef.current = setTimeout(poll, 3000);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        // 404 = o servidor reiniciou e perdeu o registro (plano gratuito tem disco efemero)
+        setSong({ id, status: 'error', errorMessage: 'musica nao encontrada no servidor (o servico pode ter reiniciado e perdido os dados). Tente enviar novamente.' });
       }
     }
+
     poll();
-    return () => clearTimeout(pollRef.current);
+    return () => { cancelled = true; clearTimeout(pollRef.current); };
   }, [id]);
 
   async function handlePrint() {

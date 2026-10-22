@@ -14,10 +14,14 @@ from chords import detect_chords
 def transcribe_lyrics(audio_path):
     """Transcreve a letra com tempos usando Whisper. Retorna lista de segmentos
     {start, end, text, words:[{start,end,word}]}. Se o Whisper falhar, retorna lista vazia.
+    O modelo pode ser escolhido via variavel de ambiente WHISPER_MODEL (padrao: tiny, que
+    consome bem menos memoria — importante em hosts gratuitos com ~512MB).
     """
     try:
+        import os
         import whisper
-        model = whisper.load_model('base')
+        model_name = os.environ.get('WHISPER_MODEL', 'tiny')
+        model = whisper.load_model(model_name)
         result = model.transcribe(audio_path, word_timestamps=True)
         segments = []
         for seg in result.get('segments', []):
