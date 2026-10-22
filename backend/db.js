@@ -14,8 +14,12 @@ if (DATABASE_URL) {
   const ssl = /localhost|127\.0\.0\.1/.test(DATABASE_URL) ? undefined : { rejectUnauthorized: false };
   pgPool = new Pool({ connectionString: DATABASE_URL, ssl });
 } else {
-  const Database = require('better-sqlite3');
-  sqlite = new Database(path.join(__dirname, 'chorde.db'));
+  try {
+    const Database = require('better-sqlite3');
+    sqlite = new Database(path.join(__dirname, 'chorde.db'));
+  } catch (e) {
+    throw new Error('DATABASE_URL nao definida e o fallback SQLite nao esta disponivel (better-sqlite3 nao instalado). Configure DATABASE_URL.');
+  }
 }
 
 const SCHEMA = `
