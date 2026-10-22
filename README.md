@@ -87,6 +87,25 @@ Edite `mobile/src/api.js` e aponte `API_URL` para o IP/host do backend (em emula
   encadeadas. Para latência menor (tempo real de verdade), seria necessário um módulo nativo de
   áudio fora do Expo Go.
 
+## Armazenamento persistente (Supabase + Render)
+
+Sem configuracao, o backend roda com SQLite + disco local (efemero em hospedagens). Para os
+arquivos e cifras sobreviverem a reinicios/deploys no Render, configure um projeto gratuito no
+Supabase (Postgres + Storage num servico so):
+
+1. Crie a conta em https://supabase.com e um projeto novo.
+2. **Banco**: Project Settings > Database > Connection string > aba **Transaction pooler** (porta
+   6543). Copie a string (troque `[YOUR-PASSWORD]` pela senha do projeto) e acrescente
+   `?sslmode=require` no final — essa e a `DATABASE_URL`.
+3. **Storage**: crie um bucket privado com o nome `audio` (Storage > New bucket).
+4. **Chaves**: Project Settings > API > copie `Project URL` (`SUPABASE_URL`) e a
+   `service_role` (`SUPABASE_SERVICE_KEY` — segredo, nao compartilhe).
+5. No Render, adicione as variaveis de ambiente: `DATABASE_URL`, `SUPABASE_URL`,
+   `SUPABASE_SERVICE_KEY`, `SUPABASE_BUCKET=audio` e `WHISPER_MODEL=tiny`.
+6. Salvar dispara o redeploy. As tabelas sao criadas automaticamente no primeiro boot.
+
+O backend mantem fallback automatico: sem essas variaveis (ou localmente), usa SQLite + disco.
+
 ## Deploy em produção (próximos passos sugeridos)
 - Trocar `backend/storage` por um bucket (S3, Google Cloud Storage, Backblaze B2).
 - Trocar o SQLite por Postgres gerenciado.

@@ -92,7 +92,8 @@ def main():
         sys.exit(1)
 
     audio_path = sys.argv[1]
-    y, sr = librosa.load(audio_path, sr=None, mono=True)
+    # sr fixo em 16kHz mono: reduz bastante o uso de memoria (importante em hosts gratuitos)
+    y, sr = librosa.load(audio_path, sr=16000, mono=True)
     duration = float(librosa.get_duration(y=y, sr=sr))
 
     chords = detect_chords(y, sr)
