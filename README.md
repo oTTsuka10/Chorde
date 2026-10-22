@@ -106,6 +106,65 @@ Supabase (Postgres + Storage num servico so):
 
 O backend mantem fallback automatico: sem essas variaveis (ou localmente), usa SQLite + disco.
 
+## Servidor próprio (Ubuntu Server) — recomendado, grátis e persistente
+
+A forma mais simples e robusta: rode o backend no seu próprio servidor Ubuntu (notebook, mini PC,
+VPS). Persistência real (disco do servidor), memória suficiente para o Whisper e zero custo.
+
+### Instalação rápida (1 comando)
+
+No Ubuntu Server, baixe e rode o script de instalação:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/oTTsuka10/chorde/main/setup-ubuntu.sh -o setup.sh
+bash setup.sh
+```
+
+Ele instala Node 22, Python, ffmpeg e git; baixa o projeto; configura o backend com SQLite local
+(persistente) + processamento Python (librosa + Whisper tiny). Ao final mostra os IPs do servidor.
+
+### Iniciar o servidor
+
+```bash
+cd ~/chorde/backend && npm start
+```
+
+Aparece `Chorde backend rodando em http://localhost:3000 (db: SQLite local, storage: disco local)`.
+
+### Rodar em background (sobe sozinho no boot)
+
+```bash
+bash ~/chorde/setup-service.sh
+```
+
+Cria um serviço systemd. Comandos: `sudo systemctl status chorde`, `sudo journalctl -u chorde -f`.
+
+### Configurar o app para acessar este servidor
+
+Edite `mobile/src/api.js` e troque `API_URL`:
+
+- **Mesma rede WiFi** (celular e servidor na mesma rede): `http://<IP-DO-SERVIDOR>:3000`
+  (o IP aparece no final da instalação, ex.: `http://192.168.0.20:3000`)
+- **Pela internet (4G, fora de casa)**: use um túnel — veja abaixo.
+
+### Acesso pela internet (túnel grátis com cloudflared)
+
+Para o app funcionar em qualquer rede (não só em casa), exponha a porta 3000 com um túnel:
+
+```bash
+# Instala o cloudflared
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt update && sudo apt install -y cloudflared
+
+# Cria um tunel temporario (URL publica aleatoria, gratis, sem cadastro)
+cloudflared tunnel --url http://localhost:3000
+```
+
+Ele mostra uma URL como `https://algo-random.trycloudflare.com`. Use essa URL no `API_URL` do app.
+O túnel dura enquanto o comando estiver rodando (para um URL fixo/estável, crie um túnel nomeado
+com `cloudflared tunnel create`).
+
 ## Deploy em produção (próximos passos sugeridos)
 - Trocar `backend/storage` por um bucket (S3, Google Cloud Storage, Backblaze B2).
 - Trocar o SQLite por Postgres gerenciado.
