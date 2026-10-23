@@ -9,15 +9,14 @@
     "splash": {
       "backgroundColor": "#1b1b1f"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chorde.app"
     },
     "android": {
-      "package": "com.chorde.app"
+      "package": "com.chorde.app",
+      "usesCleartextTraffic": true
     },
     "extra": {
       "eas": {

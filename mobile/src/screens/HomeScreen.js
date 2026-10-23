@@ -16,7 +16,7 @@ export default function HomeScreen({ navigation }) {
       const data = await listSongs();
       setSongs(data);
     } catch (e) {
-      Alert.alert('Erro', 'Nao foi possivel carregar as musicas do servidor.');
+      setSongs([]);
     } finally {
       setLoading(false);
     }
