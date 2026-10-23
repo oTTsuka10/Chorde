@@ -1,27 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import * as Print from 'expo-print';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Linking } from 'react-native';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
-import { getSong } from '../api';
-
-function buildPrintHtml(title, lines) {
-  const body = lines
-    .map((l) => `<pre class="chord">${escapeHtml(l.chordLine)}</pre><pre class="lyric">${escapeHtml(l.lyricLine)}</pre>`)
-    .join('\n');
-  return `<html><head><meta charset="utf-8" />
-    <style>
-      body { font-family: monospace; padding: 24px; }
-      h1 { font-family: sans-serif; }
-      .chord { color: #5b6cff; margin: 0; font-weight: bold; }
-      .lyric { margin: 0 0 8px 0; }
-    </style></head>
-    <body><h1>${escapeHtml(title)}</h1>${body}</body></html>`;
-}
-
-function escapeHtml(s) {
-  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { getSong, API_URL } from '../api';
 
 export default function SongScreen({ route, navigation }) {
   const { id } = route.params;
@@ -44,8 +26,7 @@ export default function SongScreen({ route, navigation }) {
         }
       } catch (e) {
         if (cancelled) return;
-        // 404 = o servidor reiniciou e perdeu o registro (plano gratuito tem disco efemero)
-        setSong({ id, status: 'error', errorMessage: 'musica nao encontrada no servidor (o servico pode ter reiniciado e perdido os dados). Tente enviar novamente.' });
+        setSong({ id, status: 'error', errorMessage: 'musica nao encontrada no servidor. Tente enviar novamente.' });
       }
     }
 
@@ -53,14 +34,17 @@ export default function SongScreen({ route, navigation }) {
     return () => { cancelled = true; clearTimeout(pollRef.current); };
   }, [id]);
 
-  async function handlePrint() {
-    if (!song?.cifra?.lines) return;
-    const html = buildPrintHtml(song.title, song.cifra.lines);
-    const { uri } = await Print.printToFileAsync({ html });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri);
-    } else {
-      await Print.printAsync({ uri });
+  async function handleExportPdf() {
+    try {
+      const fileUri = FileSystem.documentDirectory + 'cifra.pdf';
+      const downloadRes = await FileSystem.downloadAsync(`${API_URL}/songs/${id}/pdf`, fileUri);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(downloadRes.uri);
+      } else {
+        Alert.alert('PDF baixado', downloadRes.uri);
+      }
+    } catch (e) {
+      Alert.alert('Erro', 'Falha ao exportar PDF: ' + (e.message || e));
     }
   }
 
@@ -88,8 +72,8 @@ export default function SongScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.printButton} onPress={handlePrint}>
-        <Text style={styles.printText}>Imprimir / Exportar PDF</Text>
+      <TouchableOpacity style={styles.printButton} onPress={handleExportPdf}>
+        <Text style={styles.printText}>Exportar PDF</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.lyricsButton} onPress={() => navigation.navigate('LyricsSearch', { songId: id })}>
         <Text style={styles.printText}>Buscar letra oficial (letras.com.br)</Text>
