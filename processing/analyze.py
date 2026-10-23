@@ -16,13 +16,17 @@ def transcribe_lyrics(audio_path):
     {start, end, text, words:[{start,end,word}]}. Se o Whisper falhar, retorna lista vazia.
     O modelo pode ser escolhido via variavel de ambiente WHISPER_MODEL (padrao: tiny, que
     consome bem menos memoria — importante em hosts gratuitos com ~512MB).
+    Pode ser desativado com SKIP_LYRICS=1 (so detecta acordes, bem mais rapido).
     """
     try:
         import os
+        if os.environ.get('SKIP_LYRICS', '0') == '1':
+            sys.stderr.write('lyrics: pulando transcricao (SKIP_LYRICS=1)\n')
+            return []
         import whisper
         model_name = os.environ.get('WHISPER_MODEL', 'tiny')
         model = whisper.load_model(model_name)
-        result = model.transcribe(audio_path, word_timestamps=True)
+        result = model.transcribe(audio_path, word_timestamps=True, language='pt')
         segments = []
         for seg in result.get('segments', []):
             words = [
