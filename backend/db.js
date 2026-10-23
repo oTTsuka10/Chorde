@@ -37,15 +37,50 @@ CREATE TABLE IF NOT EXISTS songs (
 );
 `;
 
+const SCHEMA_USERS = `
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  name TEXT,
+  created_at TEXT
+);
+`;
+
+async function addColumnIfMissing(tableName, columnName, def) {
+  if (pgPool) {
+    await pgPool.query(`ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS ${columnName} ${def}`);
+  } else {
+    const cols = sqlite.prepare(`PRAGMA table_info(${tableName})`).all();
+    if (!cols.some(c => c.name === columnName)) {
+      sqlite.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${def}`);
+    }
+  }
+}
+
 async function init() {
   if (pgPool) {
     await pgPool.query(SCHEMA);
+    await pgPool.query(SCHEMA_USERS);
   } else {
     sqlite.exec(SCHEMA);
+    sqlite.exec(SCHEMA_USERS);
   }
+  await addColumnIfMissing('songs', 'approved', 'INTEGER NOT NULL DEFAULT 0');
+  await addColumnIfMissing('songs', 'uploaded_by', 'TEXT');
   // musicas presas em "processing" de uma execucao anterior perderam o arquivo temporario
   // (reinicio do servico) — marcam erro para o usuario poder reenviar/reprocessar.
   await run("UPDATE songs SET status = 'error', error_message = 'processamento interrompido: o servico reiniciou. Envie o audio novamente.' WHERE status = 'processing'");
+  // Cria admin padrao se nao existir nenhum usuario
+  const { hashPassword } = require('./auth');
+  const adminCount = await get('SELECT COUNT(*) as cnt FROM users WHERE role = ?', ['admin']);
+  if (adminCount && adminCount.cnt === 0) {
+    const { randomUUID } = require('crypto');
+    await run('INSERT INTO users (id, email, password_hash, role, name, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [randomUUID(), 'admin@chorde.app', hashPassword('admin123'), 'admin', 'Administrador', new Date().toISOString()]);
+    console.log('[db] Admin padrao criado: admin@chorde.app / admin123 (TROQUE A SENHA!)');
+  }
 }
 
 function toPgSql(sql) {

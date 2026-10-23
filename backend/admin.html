@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chorde - Admin</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f12;color:#e0e0e0;min-height:100vh}
+.login{max-width:360px;margin:80px auto;background:#1a1a20;padding:32px;border-radius:12px}
+.login h1{color:#5b6cff;font-size:22px;margin-bottom:24px;text-align:center}
+.login input{width:100%;background:#2a2a30;border:none;border-radius:8px;padding:12px 16px;color:#fff;font-size:15px;margin-bottom:12px}
+.login button{width:100%;background:#5b6cff;border:none;border-radius:8px;padding:12px;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+.login button:hover{background:#4a5bef}
+.login .err{color:#e06666;font-size:13px;margin-top:12px;text-align:center}
+.dash{max-width:1100px;margin:0 auto;padding:24px}
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.dash-header h1{color:#5b6cff;font-size:22px}
+.dash-header .user{font-size:14px;color:#888}
+.dash-header button{background:#333;border:none;border-radius:8px;padding:8px 16px;color:#ccc;cursor:pointer;font-size:13px}
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filters button{background:#2a2a30;border:none;border-radius:6px;padding:8px 14px;color:#aaa;cursor:pointer;font-size:13px}
+.filters button.active{background:#5b6cff;color:#fff}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:12px;color:#666;text-transform:uppercase;border-bottom:1px solid #222}
+td{padding:12px;border-bottom:1px solid #1a1a20;font-size:14px}
+tr:hover td{background:#16161a}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-ready{background:#1a3a1a;color:#4caf50}
+.badge-processing{background:#2a2a10;color:#ffc107}
+.badge-error{background:#3a1a1a;color:#e06666}
+.badge-approved{background:#1a3a1a;color:#4caf50}
+.badge-pending{background:#3a2a10;color:#ff9800}
+.btn-sm{background:#2a2a30;border:none;border-radius:6px;padding:6px 12px;color:#ccc;cursor:pointer;font-size:12px;margin-right:4px}
+.btn-sm:hover{background:#3a3a40}
+.btn-approve{background:#1a3a1a;color:#4caf50}
+.btn-reject{background:#3a2a10;color:#ff9800}
+.btn-delete{background:#3a1a1a;color:#e06666}
+.btn-edit{background:#1a2a3a;color:#5b9cff}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;justify-content:center;align-items:center;z-index:100}
+.modal-overlay.show{display:flex}
+.modal{background:#1a1a20;border-radius:12px;padding:24px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto}
+.modal h2{color:#5b6cff;font-size:18px;margin-bottom:16px}
+.modal label{display:block;font-size:13px;color:#888;margin-bottom:4px;margin-top:12px}
+.modal input,.modal textarea{width:100%;background:#2a2a30;border:none;border-radius:8px;padding:10px 12px;color:#fff;font-size:14px}
+.modal textarea{font-family:monospace;min-height:80px;resize:vertical}
+.modal .btns{display:flex;gap:8px;margin-top:20px}
+.modal .btns button{flex:1;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.modal .btn-save{background:#5b6cff;color:#fff}
+.modal .btn-cancel{background:#333;color:#ccc}
+.empty{text-align:center;padding:40px;color:#666}
+</style>
+</head>
+<body>
+<div id="loginView" class="login">
+<h1>Chorde Admin</h1>
+<input id="email" type="email" placeholder="Email" value="admin@chorde.app">
+<input id="password" type="password" placeholder="Senha" value="">
+<button onclick="doLogin()">Entrar</button>
+<div id="loginErr" class="err"></div>
+</div>
+
+<div id="dashView" class="dash" style="display:none">
+<div class="dash-header">
+<h1>Chorde - Painel Admin</h1>
+<div><span class="user" id="userName"></span> <button onclick="logout()">Sair</button></div>
+</div>
+<div class="filters">
+<button class="active" data-filter="all" onclick="setFilter('all')">Todas</button>
+<button data-filter="pending" onclick="setFilter('pending')">Pendentes</button>
+<button data-filter="approved" onclick="setFilter('approved')">Aprovadas</button>
+<button data-filter="ready" onclick="setFilter('ready')">Prontas</button>
+<button data-filter="error" onclick="setFilter('error')">Com erro</button>
+</div>
+<table>
+<thead><tr><th>Titulo</th><th>Status</th><th>Aprovacao</th><th>Enviado por</th><th>Acoes</th></tr></thead>
+<tbody id="songsBody"></tbody>
+</table>
+</div>
+
+<div id="editModal" class="modal-overlay">
+<div class="modal">
+<h2>Editar Cifra</h2>
+<label>Titulo</label>
+<input id="editTitle" type="text">
+<div id="editLines"></div>
+<div class="btns">
+<button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+<button class="btn-save" onclick="saveEdit()">Salvar</button>
+</div>
+</div>
+</div>
+
+<script>
+let token=localStorage.getItem('chorde_token')||'';
+let songs=[];
+let currentFilter='all';
+let editingId=null;
+let editingCifra=null;
+
+async function api(method,path,body){
+const opts={method,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}};
+if(body)opts.body=JSON.stringify(body);
+const r=await fetch(path,opts);
+if(r.status===401){logout();throw new Error('nao autorizado');}
+const d=await r.json();
+if(!r.ok)throw new Error(d.error||'erro');
+return d;
+}
+
+async function doLogin(){
+const email=document.getElementById('email').value;
+const password=document.getElementById('password').value;
+document.getElementById('loginErr').textContent='';
+try{
+const d=await api('POST','/auth/login',{email,password});
+token=d.token;
+localStorage.setItem('chorde_token',token);
+showDash(d.user);
+}catch(e){document.getElementById('loginErr').textContent=e.message;}
+}
+
+function logout(){token='';localStorage.removeItem('chorde_token');location.reload();}
+
+function showDash(user){
+document.getElementById('loginView').style.display='none';
+document.getElementById('dashView').style.display='block';
+document.getElementById('userName').textContent=user.name||user.email;
+loadSongs();
+}
+
+function setFilter(f){
+currentFilter=f;
+document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('active'));
+document.querySelector('[data-filter="'+f+'"]').classList.add('active');
+renderSongs();
+}
+
+async function loadSongs(){
+try{songs=await api('GET','/admin/songs');renderSongs();}catch(e){console.error(e);}
+}
+
+function renderSongs(){
+let filtered=songs;
+if(currentFilter==='pending')filtered=songs.filter(s=>!s.approved);
+else if(currentFilter==='approved')filtered=songs.filter(s=>s.approved);
+else if(currentFilter==='ready')filtered=songs.filter(s=>s.status==='ready');
+else if(currentFilter==='error')filtered=songs.filter(s=>s.status==='error');
+
+const body=document.getElementById('songsBody');
+if(filtered.length===0){body.innerHTML='<tr><td colspan="5" class="empty">Nenhuma musica encontrada.</td></tr>';return;}
+body.innerHTML=filtered.map(s=>`
+<tr>
+<td>${esc(s.title)}</td>
+<td><span class="badge badge-${s.status}">${s.status}</span></td>
+<td><span class="badge ${s.approved?'badge-approved':'badge-pending'}">${s.approved?'Aprovada':'Pendente'}</span></td>
+<td>${esc(s.uploadedBy||'-')}</td>
+<td>
+${!s.approved?`<button class="btn-sm btn-approve" onclick="approve('${s.id}')">Aprovar</button>`:''}
+${s.approved?`<button class="btn-sm btn-reject" onclick="reject('${s.id}')">Rejeitar</button>`:''}
+${s.status==='ready'?`<button class="btn-sm btn-edit" onclick="openEdit('${s.id}')">Editar</button>`:''}
+<button class="btn-sm btn-delete" onclick="del('${s.id}','${esc(s.title)}')">Excluir</button>
+</td>
+</tr>`).join('');
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+async function approve(id){try{await api('PATCH','/admin/songs/'+id+'/approve');loadSongs();}catch(e){alert(e.message);}}
+async function reject(id){try{await api('PATCH','/admin/songs/'+id+'/reject');loadSongs();}catch(e){alert(e.message);}}
+async function del(id,title){if(!confirm('Excluir "'+title+'"?'))return;try{await api('DELETE','/admin/songs/'+id);loadSongs();}catch(e){alert(e.message);}}
+
+function openEdit(id){
+const s=songs.find(x=>x.id===id);
+if(!s||!s.cifra)return;
+editingId=id;editingCifra=JSON.parse(JSON.stringify(s.cifra));
+document.getElementById('editTitle').value=s.title;
+const linesDiv=document.getElementById('editLines');
+linesDiv.innerHTML='';
+editingCifra.lines.forEach((line,i)=>{
+const lbl=document.createElement('label');lbl.textContent='Linha '+(i+1)+' - Acordes';
+const ta1=document.createElement('textarea');ta1.id='chord_'+i;ta1.value=line.chordLine;
+const lbl2=document.createElement('label');lbl2.textContent='Letra';
+const ta2=document.createElement('textarea');ta2.id='lyric_'+i;ta2.value=line.lyricLine||'';
+linesDiv.appendChild(lbl);linesDiv.appendChild(ta1);linesDiv.appendChild(lbl2);linesDiv.appendChild(ta2);
+});
+document.getElementById('editModal').classList.add('show');
+}
+
+function closeModal(){document.getElementById('editModal').classList.remove('show');editingId=null;}
+
+async function saveEdit(){
+if(!editingId)return;
+const title=document.getElementById('editTitle').value;
+editingCifra.lines.forEach((line,i)=>{
+line.chordLine=document.getElementById('chord_'+i).value;
+line.lyricLine=document.getElementById('lyric_'+i).value;
+});
+try{await api('PATCH','/admin/songs/'+editingId,{title,cifra:editingCifra});closeModal();loadSongs();}catch(e){alert(e.message);}
+}
+
+(async function init(){
+if(token){
+try{
+const d=await api('GET','/auth/me');
+showDash(d.user);
+}catch{logout();}
+}
+})();
+</script>
+</body>
+</html>

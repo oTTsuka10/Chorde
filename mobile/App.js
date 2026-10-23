@@ -16,29 +16,91 @@ const ALL_CHORDS = [
   'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm',
 ];
 
+let currentToken = null;
+
+function authHeaders() { return { Authorization: 'Bearer ' + currentToken }; }
+
 async function uploadSong(fileUri, fileName, mimeType, title) {
   const res = await FileSystem.uploadAsync(`${API_URL}/songs/upload`, fileUri, {
     fieldName: 'audio', mimeType: mimeType || 'audio/mpeg',
     uploadType: FileSystem.FileSystemUploadType.MULTIPART,
     parameters: title ? { title } : {},
+    headers: authHeaders(),
   });
   if (res.status < 200 || res.status >= 300) throw new Error(`servidor: ${res.status}`);
   return JSON.parse(res.body);
 }
-async function listSongs() { const { data } = await axios.get(`${API_URL}/songs`); return data; }
-async function getSong(id) { const { data } = await axios.get(`${API_URL}/songs/${id}`); return data; }
+async function listSongs() { const { data } = await axios.get(`${API_URL}/songs`, { headers: authHeaders() }); return data; }
+async function getSong(id) { const { data } = await axios.get(`${API_URL}/songs/${id}`, { headers: authHeaders() }); return data; }
 async function updateChord(id, lineIndex, oldChord, newChord) {
-  const { data } = await axios.patch(`${API_URL}/songs/${id}/chord`, { lineIndex, oldChord, newChord });
+  const { data } = await axios.patch(`${API_URL}/songs/${id}/chord`, { lineIndex, oldChord, newChord }, { headers: authHeaders() });
+  return data;
+}
+async function moveChord(id, lineIndex, chordIndex, direction) {
+  const { data } = await axios.patch(`${API_URL}/songs/${id}/chord/move`, { lineIndex, chordIndex, direction }, { headers: authHeaders() });
   return data;
 }
 
-function ChordPickerModal({ visible, currentChord, onSelect, onClose }) {
+function LoginScreen({ onLogin }) {
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  async function handleSubmit() {
+    if (!email.trim() || !password.trim()) { Alert.alert('Erro', 'Preencha email e senha.'); return; }
+    if (mode === 'register' && !name.trim()) { Alert.alert('Erro', 'Preencha seu nome.'); return; }
+    setLoading(true);
+    try {
+      const url = mode === 'login' ? `${API_URL}/auth/login` : `${API_URL}/auth/register`;
+      const body = mode === 'login' ? { email: email.trim(), password } : { email: email.trim(), password, name: name.trim() };
+      const { data } = await axios.post(url, body);
+      if (!data || !data.token) throw new Error('Resposta sem token');
+      onLogin(data.token, data.user || null);
+    } catch (e) {
+      const msg = (e.response && e.response.data && e.response.data.error) || e.message || String(e);
+      Alert.alert('Erro', 'Falha: ' + msg);
+    } finally { setLoading(false); }
+  }
+  return (
+    <View style={s.loginContainer}>
+      <Text style={s.loginTitle}>Chorde</Text>
+      <Text style={s.loginSubtitle}>Cifras inteligentes</Text>
+      {mode === 'register' && (
+        <TextInput style={s.input} placeholder="Nome" placeholderTextColor="#666" value={name} onChangeText={setName} autoCapitalize="words" />
+      )}
+      <TextInput style={s.input} placeholder="Email" placeholderTextColor="#666" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+      <TextInput style={s.input} placeholder="Senha" placeholderTextColor="#666" value={password} onChangeText={setPassword} secureTextEntry />
+      <TouchableOpacity style={[s.uploadButton, loading && { opacity: 0.6 }]} onPress={handleSubmit} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.uploadText}>{mode === 'login' ? 'Entrar' : 'Registrar'}</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
+        <Text style={s.toggleText}>{mode === 'login' ? 'Nao tem conta? Registrar' : 'Ja tem conta? Entrar'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function StatusRow({ item }) {
+  const statusText = item.status === 'ready' ? 'Cifra pronta' : item.status === 'processing' ? 'Processando...' : 'Erro';
+  const approved = item.approved === true;
+  return (
+    <View style={s.statusRow}>
+      <Text style={s.statusInline}>{statusText}</Text>
+      <Text style={[s.approvalBadge, { backgroundColor: approved ? '#1f3d2b' : '#3d2f1f', color: approved ? '#6fbf6f' : '#d9a441' }]}>
+        {approved ? 'Aprovada' : 'Pendente'}
+      </Text>
+    </View>
+  );
+}
+
+function ChordPickerModal({ visible, currentChord, onSelect, onMoveLeft, onMoveRight, onClose }) {
   return (
     <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
       <View style={s.modalOverlay}>
         <View style={s.modalContent}>
           <Text style={s.modalTitle}>Trocar acorde (atual: {currentChord})</Text>
-          <ScrollView style={{ maxHeight: 350 }}>
+          <ScrollView style={{ maxHeight: 280 }}>
             <View style={s.chordGrid}>
               {ALL_CHORDS.map((chord) => (
                 <TouchableOpacity key={chord} style={[s.chordOption, chord === currentChord && s.chordOptionActive]}
@@ -48,6 +110,14 @@ function ChordPickerModal({ visible, currentChord, onSelect, onClose }) {
               ))}
             </View>
           </ScrollView>
+          <View style={{ flexDirection: 'row', marginTop: 12 }}>
+            <TouchableOpacity style={[s.moveButton, { flex: 1, marginRight: 6 }]} onPress={onMoveLeft}>
+              <Text style={s.closeButtonText}>{'◀ Mover esquerda'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.moveButton, { flex: 1, marginLeft: 6 }]} onPress={onMoveRight}>
+              <Text style={s.closeButtonText}>{'Mover direita ▶'}</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={s.closeButton} onPress={onClose}>
             <Text style={s.closeButtonText}>Cancelar</Text>
           </TouchableOpacity>
@@ -59,14 +129,17 @@ function ChordPickerModal({ visible, currentChord, onSelect, onClose }) {
 
 function CifraLine({ line, lineIndex, onChordPress }) {
   const parts = line.chordLine.split(/(\[[^\]]+\])/).filter(p => p.length > 0);
+  let chordIndex = 0;
   return (
     <View style={{ marginBottom: 6 }}>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
         {parts.map((part, i) => {
           if (part.startsWith('[') && part.endsWith(']')) {
             const chord = part.slice(1, -1);
+            const idx = chordIndex;
+            chordIndex += 1;
             return (
-              <TouchableOpacity key={i} onPress={() => onChordPress(lineIndex, chord)}>
+              <TouchableOpacity key={i} onPress={() => onChordPress(lineIndex, chord, idx)}>
                 <Text style={s.chordLine}>{chord}</Text>
               </TouchableOpacity>
             );
@@ -112,7 +185,7 @@ function HomeScreen({ navigation }) {
           renderItem={({ item }) => (
             <TouchableOpacity style={s.songItem} onPress={() => navigation.navigate('Song', { id: item.id })}>
               <Text style={s.songTitle}>{item.title}</Text>
-              <Text style={s.songStatus}>{item.status === 'ready' ? 'Cifra pronta' : item.status === 'processing' ? 'Processando...' : 'Erro'}</Text>
+              <StatusRow item={item} />
             </TouchableOpacity>
           )}
           ListEmptyComponent={<Text style={s.empty}>Nenhuma musica enviada ainda.</Text>} />
@@ -138,7 +211,7 @@ function MusicasScreen({ navigation }) {
           renderItem={({ item }) => (
             <TouchableOpacity style={s.songItem} onPress={() => navigation.navigate('Song', { id: item.id })}>
               <Text style={s.songTitle}>{item.title}</Text>
-              <Text style={s.songStatus}>{item.status === 'ready' ? 'Cifra pronta' : item.status === 'processing' ? 'Processando...' : 'Erro'}</Text>
+              <StatusRow item={item} />
             </TouchableOpacity>
           )}
           ListEmptyComponent={<Text style={s.empty}>Nenhuma musica enviada ainda.</Text>} />
@@ -199,7 +272,7 @@ function DeteccaoScreen() {
 function SongScreen({ route, navigation }) {
   const { id } = route.params;
   const [song, setSong] = useState(null);
-  const [modal, setModal] = useState({ visible: false, lineIndex: -1, chord: '' });
+  const [modal, setModal] = useState({ visible: false, lineIndex: -1, chord: '', chordIndex: -1 });
   const pollRef = useRef(null);
   useEffect(() => {
     let cancelled = false; let attempts = 0;
@@ -218,10 +291,17 @@ function SongScreen({ route, navigation }) {
     try { const updated = await updateChord(id, modal.lineIndex, modal.chord, newChord); setSong(updated); }
     catch { Alert.alert('Erro', 'Falha ao trocar acorde.'); }
   }
+  async function handleChordMove(direction) {
+    try {
+      const updated = await moveChord(id, modal.lineIndex, modal.chordIndex, direction);
+      setSong(updated);
+      setModal({ visible: false, lineIndex: -1, chord: '', chordIndex: -1 });
+    } catch { Alert.alert('Erro', 'Falha ao mover acorde.'); }
+  }
   async function handlePdf() {
     try {
       const fileUri = FileSystem.documentDirectory + 'cifra.pdf';
-      const res = await FileSystem.downloadAsync(`${API_URL}/songs/${id}/pdf`, fileUri);
+      const res = await FileSystem.downloadAsync(`${API_URL}/songs/${id}/pdf`, fileUri, { headers: authHeaders() });
       if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(res.uri);
       else Alert.alert('PDF', res.uri);
     } catch (e) { Alert.alert('Erro', 'Falha PDF: ' + (e.message || e)); }
@@ -239,14 +319,15 @@ function SongScreen({ route, navigation }) {
         <TouchableOpacity style={[s.printButton, { flex: 1, marginRight: 5 }]} onPress={handlePdf}><Text style={s.printText}>PDF</Text></TouchableOpacity>
         <TouchableOpacity style={[s.lyricsButton, { flex: 1, marginLeft: 5 }]} onPress={() => navigation.navigate('LyricsSearch', { songId: id })}><Text style={s.printText}>Buscar letra</Text></TouchableOpacity>
       </View>
-      <Text style={s.hintText}>Toque em um acorde para troca-lo</Text>
+      <Text style={s.hintText}>Toque em um acorde para troca-lo ou move-lo</Text>
       <ScrollView style={{ flex: 1 }}>
         {song.cifra.lines.map((line, idx) => (
-          <CifraLine key={idx} line={line} lineIndex={idx} onChordPress={(li, ch) => setModal({ visible: true, lineIndex: li, chord: ch })} />
+          <CifraLine key={idx} line={line} lineIndex={idx} onChordPress={(li, ch, ci) => setModal({ visible: true, lineIndex: li, chord: ch, chordIndex: ci })} />
         ))}
       </ScrollView>
       <ChordPickerModal visible={modal.visible} currentChord={modal.chord}
-        onSelect={handleChordSelect} onClose={() => setModal({ visible: false, lineIndex: -1, chord: '' })} />
+        onSelect={handleChordSelect} onMoveLeft={() => handleChordMove('left')} onMoveRight={() => handleChordMove('right')}
+        onClose={() => setModal({ visible: false, lineIndex: -1, chord: '', chordIndex: -1 })} />
     </View>
   );
 }
@@ -258,12 +339,12 @@ function LyricsSearchScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   async function handleSearch() {
     if (!query.trim()) return; setLoading(true);
-    try { const { data } = await axios.get(`${API_URL}/lyrics/search`, { params: { q: query } }); setResults(data); }
+    try { const { data } = await axios.get(`${API_URL}/lyrics/search`, { params: { q: query }, headers: authHeaders() }); setResults(data); }
     catch { Alert.alert('Erro', 'Falha na busca.'); }
     finally { setLoading(false); }
   }
   async function handleImport(item) {
-    try { await axios.post(`${API_URL}/songs/${songId}/lyrics/import`, { url: item.url }); Alert.alert('Pronto', 'Letra importada.'); navigation.navigate('Song', { id: songId }); }
+    try { await axios.post(`${API_URL}/songs/${songId}/lyrics/import`, { url: item.url }, { headers: authHeaders() }); Alert.alert('Pronto', 'Letra importada.'); navigation.navigate('Song', { id: songId }); }
     catch { Alert.alert('Erro', 'Falha ao importar.'); }
   }
   return (
@@ -292,10 +373,16 @@ function LyricsSearchScreen({ route, navigation }) {
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function Tabs() {
+function Tabs({ onLogout }) {
   return (
     <Tab.Navigator screenOptions={{ headerStyle: { backgroundColor: '#1b1b1f' }, headerTintColor: '#fff', tabBarStyle: { backgroundColor: '#1b1b1f' }, tabBarActiveTintColor: '#5b6cff', tabBarInactiveTintColor: '#666' }}>
-      <Tab.Screen name="Inicio" component={HomeScreen} options={{ title: 'Inicio' }} />
+      <Tab.Screen name="Inicio" options={{ title: 'Inicio', headerRight: () => (
+        <TouchableOpacity style={s.logoutButton} onPress={onLogout}>
+          <Text style={s.logoutText}>Sair</Text>
+        </TouchableOpacity>
+      ) }}>
+        {(props) => <HomeScreen {...props} />}
+      </Tab.Screen>
       <Tab.Screen name="Musicas" component={MusicasScreen} options={{ title: 'Musicas' }} />
       <Tab.Screen name="Deteccao" component={DeteccaoScreen} options={{ title: 'Deteccao' }} />
     </Tab.Navigator>
@@ -303,10 +390,25 @@ function Tabs() {
 }
 
 export default function App() {
+  const [authToken, setAuthToken] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  function handleLogin(token, user) {
+    currentToken = token;
+    setAuthToken(token);
+    setCurrentUser(user);
+  }
+  function handleLogout() {
+    currentToken = null;
+    setAuthToken(null);
+    setCurrentUser(null);
+  }
+  if (!authToken) return <LoginScreen onLogin={handleLogin} />;
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: '#1b1b1f' }, headerTintColor: '#fff' }}>
-        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Tabs" options={{ headerShown: false }}>
+          {() => <Tabs onLogout={handleLogout} />}
+        </Stack.Screen>
         <Stack.Screen name="Song" component={SongScreen} options={{ title: 'Cifra' }} />
         <Stack.Screen name="LyricsSearch" component={LyricsSearchScreen} options={{ title: 'Buscar letra' }} />
       </Stack.Navigator>
@@ -317,6 +419,11 @@ export default function App() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111114', padding: 16 },
   center: { flex: 1, backgroundColor: '#111114', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  loginContainer: { flex: 1, backgroundColor: '#111114', justifyContent: 'center', padding: 24 },
+  loginTitle: { color: '#fff', fontSize: 30, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
+  loginSubtitle: { color: '#8f8f99', fontSize: 14, textAlign: 'center', marginBottom: 32 },
+  input: { backgroundColor: '#1d1d22', color: '#fff', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#2a2a30' },
+  toggleText: { color: '#5b6cff', fontSize: 14, textAlign: 'center', marginTop: 16 },
   uploadButton: { backgroundColor: '#5b6cff', borderRadius: 10, padding: 16, alignItems: 'center', marginBottom: 20 },
   stopButton: { backgroundColor: '#e06666' },
   uploadText: { color: '#fff', fontWeight: '600', fontSize: 16 },
@@ -324,6 +431,11 @@ const s = StyleSheet.create({
   songItem: { backgroundColor: '#1d1d22', borderRadius: 8, padding: 14, marginBottom: 10 },
   songTitle: { color: '#fff', fontSize: 16, fontWeight: '500' },
   songStatus: { color: '#8f8f99', fontSize: 12, marginTop: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
+  statusInline: { color: '#8f8f99', fontSize: 12 },
+  approvalBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, fontSize: 10, fontWeight: '600', marginLeft: 8, overflow: 'hidden' },
+  logoutButton: { marginRight: 16, padding: 4 },
+  logoutText: { color: '#5b6cff', fontSize: 14, fontWeight: '600' },
   empty: { color: '#666', textAlign: 'center', marginTop: 30 },
   statusText: { color: '#ccc', marginTop: 12, fontSize: 15 },
   errorText: { color: '#e06666', marginTop: 8, fontSize: 12, textAlign: 'center' },
@@ -344,6 +456,7 @@ const s = StyleSheet.create({
   chordOption: { backgroundColor: '#2a2a30', borderRadius: 8, padding: 12, margin: 4, minWidth: 60, alignItems: 'center' },
   chordOptionActive: { backgroundColor: '#5b6cff' },
   chordOptionText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  moveButton: { backgroundColor: '#2e2e38', borderRadius: 8, padding: 12, alignItems: 'center' },
   closeButton: { backgroundColor: '#333', borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 12 },
   closeButtonText: { color: '#fff', fontSize: 14 },
 });

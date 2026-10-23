@@ -18,6 +18,7 @@
       "package": "com.chorde.app",
       "usesCleartextTraffic": true
     },
+    "plugins": ["./networkSecurityPlugin.js"],
     "extra": {
       "eas": {
         "projectId": "c2ca86b4-318a-4e34-ae4a-c9692baf22b3"
