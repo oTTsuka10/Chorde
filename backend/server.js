@@ -84,7 +84,7 @@ app.post('/songs/upload', upload.single('audio'), async (req, res) => {
 });
 
 app.get('/songs', async (req, res) => {
-  const rows = await db.query('SELECT * FROM songs ORDER BY created_at DESC');
+  const rows = await db.query('SELECT * FROM songs ORDER BY title COLLATE NOCASE ASC');
   res.json(rows.map(toPublic));
 });
 
@@ -114,6 +114,32 @@ app.get('/songs/:id/pdf', async (req, res) => {
     doc.moveDown(0.3);
   }
   doc.end();
+});
+
+// Atualiza um acorde especifico na cifra (edicao manual pelo usuario).
+app.patch('/songs/:id/chord', async (req, res) => {
+  const row = await db.get('SELECT * FROM songs WHERE id = ?', [req.params.id]);
+  if (!row) return res.status(404).json({ error: 'musica nao encontrada' });
+  if (row.status !== 'ready') return res.status(409).json({ error: 'cifra ainda nao esta pronta' });
+
+  const { lineIndex, oldChord, newChord } = req.body;
+  const cifra = JSON.parse(row.cifra_json);
+
+  if (lineIndex < 0 || lineIndex >= cifra.lines.length) {
+    return res.status(400).json({ error: 'indice de linha invalido' });
+  }
+
+  const line = cifra.lines[lineIndex];
+  line.chordLine = line.chordLine.replace(`[${oldChord}]`, `[${newChord}]`);
+
+  // Atualiza tambem o array de acordes (para consistencia)
+  for (const c of cifra.chords) {
+    if (c.chord === oldChord) { c.chord = newChord; break; }
+  }
+
+  await db.run('UPDATE songs SET cifra_json = ? WHERE id = ?', [JSON.stringify(cifra), row.id]);
+  const updated = await db.get('SELECT * FROM songs WHERE id = ?', [row.id]);
+  res.json(toPublic(updated));
 });
 
 // Busca candidatos de letra no letras.com.br para o usuario escolher a versao correta.

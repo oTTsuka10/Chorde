@@ -24,7 +24,7 @@ def transcribe_lyrics(audio_path):
             sys.stderr.write('lyrics: pulando transcricao (SKIP_LYRICS=1)\n')
             return []
         import whisper
-        model_name = os.environ.get('WHISPER_MODEL', 'tiny')
+        model_name = os.environ.get('WHISPER_MODEL', 'base')
         model = whisper.load_model(model_name)
         result = model.transcribe(audio_path, word_timestamps=True, language='pt')
         segments = []
